@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log*
+.env
+.env.*
+!.env.example
+logs/
+.git
+.gitignore
+*.md
+.DS_Store
+Thumbs.db
+coverage/
+.nyc_output/
+prisma/migrations/*/migration_lock.toml

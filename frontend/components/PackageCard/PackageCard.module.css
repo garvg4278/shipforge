@@ -1,0 +1,160 @@
+/* components/PackageCard/PackageCard.module.css */
+
+.card {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color var(--transition-base), transform var(--transition-base);
+  animation: slideIn 0.25s ease forwards;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.card:hover {
+  border-color: var(--color-surface-overlay);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-surface-overlay);
+  border-bottom: 1px solid var(--color-border);
+  min-height: 44px;
+}
+
+.cardIndex {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.packageDot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.packageLabel {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  font-family: var(--font-display);
+}
+
+.packageLabel strong {
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+.packageName {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 2px var(--space-2);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.removeBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-weight: 500;
+}
+
+.removeBtn:hover {
+  background: var(--color-error-muted);
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.cardBody {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.dimensionsRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dimensionsLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.dimensionsUnit {
+  color: var(--color-text-muted);
+  font-weight: 400;
+  font-size: var(--text-xs);
+}
+
+.dimensionsInputs {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  gap: var(--space-2);
+  align-items: flex-end;
+}
+
+.dimSeparator {
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+  font-weight: 300;
+  padding-bottom: 10px;
+  user-select: none;
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  .row2 {
+    grid-template-columns: 1fr;
+  }
+
+  .dimensionsInputs {
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: var(--space-1);
+  }
+}

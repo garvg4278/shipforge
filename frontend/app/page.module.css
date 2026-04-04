@@ -1,0 +1,122 @@
+/* app/page.module.css */
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+  padding: var(--space-6);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.formPanel {
+  min-width: 0;
+  /* scrollable independently */
+  max-height: calc(100vh - 80px - var(--space-12));
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+  border-radius: var(--radius-xl);
+}
+
+.formPanel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.formPanel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.formPanel::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+.previewPanel {
+  min-width: 0;
+  position: sticky;
+  top: calc(80px + var(--space-6));
+  max-height: calc(100vh - 80px - var(--space-12));
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+  border-radius: var(--radius-xl);
+}
+
+.previewPanel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.previewPanel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.previewPanel::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+@media (max-width: 1024px) {
+  .workspace {
+    grid-template-columns: 1fr;
+    padding: var(--space-4);
+    gap: var(--space-4);
+  }
+
+  .formPanel {
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .previewPanel {
+    position: relative;
+    top: 0;
+    max-height: none;
+    overflow-y: visible;
+  }
+}
+
+@media (max-width: 640px) {
+  .workspace {
+    padding: var(--space-3);
+    gap: var(--space-3);
+  }
+}
+
+.loadingShell {
+  min-height: 100vh;
+  background-color: var(--color-bg);
+}
+
+.loadingShell {
+  min-height: 100vh;
+  background-color: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

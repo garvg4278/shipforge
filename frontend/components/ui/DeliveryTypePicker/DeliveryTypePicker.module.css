@@ -1,0 +1,117 @@
+/* components/ui/DeliveryTypePicker/DeliveryTypePicker.module.css */
+
+.picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+
+.option::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.option:hover {
+  border-color: var(--color-text-muted);
+  background: var(--color-surface-overlay);
+  transform: translateY(-1px);
+}
+
+.selectedStandard {
+  border-color: var(--color-standard);
+  background: var(--color-standard-muted);
+  box-shadow: 0 0 0 1px var(--color-standard), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.selectedStandard:hover {
+  border-color: var(--color-standard);
+  background: var(--color-standard-muted);
+  transform: none;
+}
+
+.selectedExpress {
+  border-color: var(--color-express);
+  background: var(--color-express-muted);
+  box-shadow: 0 0 0 1px var(--color-express), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.selectedExpress:hover {
+  border-color: var(--color-express);
+  background: var(--color-express-muted);
+  transform: none;
+}
+
+.optionIcon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.optionContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.optionLabel {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: block;
+}
+
+.optionMeta {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  display: block;
+}
+
+.optionCheck {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.selectedStandard .optionCheck {
+  background: var(--color-standard);
+  border-color: var(--color-standard);
+  color: white;
+}
+
+.selectedExpress .optionCheck {
+  background: var(--color-express);
+  border-color: var(--color-express);
+  color: white;
+}
+
+@media (max-width: 480px) {
+  .picker {
+    grid-template-columns: 1fr;
+  }
+}

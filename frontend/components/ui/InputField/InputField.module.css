@@ -1,0 +1,135 @@
+/* components/ui/InputField/InputField.module.css */
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.required {
+  color: var(--color-accent);
+  font-size: var(--text-base);
+  line-height: 1;
+}
+
+.inputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input {
+  width: 100%;
+  height: 44px;
+  padding: 0 var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: 400;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.input:hover {
+  border-color: var(--color-border-focus);
+  background: var(--color-surface-overlay);
+}
+
+.input:focus {
+  border-color: var(--color-accent);
+  background: var(--color-surface-overlay);
+  box-shadow: 0 0 0 3px var(--color-accent-muted);
+}
+
+.input:read-only {
+  color: var(--color-text-muted);
+  cursor: default;
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+.input:read-only:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.hasPrefix {
+  padding-left: 40px;
+}
+
+.hasSuffix {
+  padding-right: 52px;
+}
+
+.prefix {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+  pointer-events: none;
+  z-index: 1;
+  font-weight: 500;
+}
+
+.suffix {
+  position: absolute;
+  right: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 1;
+  background: var(--color-surface-overlay);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+.hasError .input {
+  border-color: var(--color-error);
+}
+
+.hasError .input:focus {
+  box-shadow: 0 0 0 3px var(--color-error-muted);
+}
+
+.errorMsg {
+  font-size: var(--text-xs);
+  color: var(--color-error);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: 500;
+}
+
+.errorMsg::before {
+  content: '⚠';
+  font-size: 10px;
+}
+
+.hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin: 0;
+}

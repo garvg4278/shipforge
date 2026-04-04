@@ -1,0 +1,33 @@
+# ===== ROOT IGNORE =====
+
+# Node modules (all)
+node_modules/
+**/node_modules/
+
+# Env files (VERY IMPORTANT)
+.env
+.env.*
+**/.env
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Next.js
+.next/
+out/
+
+# Build
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+
+# Prisma (optional local db)
+backend/prisma/dev.db

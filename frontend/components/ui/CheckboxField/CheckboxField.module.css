@@ -1,0 +1,91 @@
+/* components/ui/CheckboxField/CheckboxField.module.css */
+
+.wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  user-select: none;
+}
+
+.wrapper:hover {
+  background: var(--color-surface-overlay);
+  border-color: var(--color-text-muted);
+}
+
+.purple.checked {
+  background: var(--color-fragile-muted);
+  border-color: var(--color-fragile);
+  box-shadow: 0 0 0 1px var(--color-fragile);
+}
+
+.cyan.checked {
+  background: var(--color-insured-muted);
+  border-color: var(--color-insured);
+  box-shadow: 0 0 0 1px var(--color-insured);
+}
+
+.checkboxOuter {
+  position: relative;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.hiddenInput {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.checkboxVisual {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  color: white;
+}
+
+.purple.checked .checkboxVisual {
+  background: var(--color-fragile);
+  border-color: var(--color-fragile);
+}
+
+.cyan.checked .checkboxVisual {
+  background: var(--color-insured);
+  border-color: var(--color-insured);
+}
+
+.wrapper:hover .checkboxVisual {
+  border-color: var(--color-text-secondary);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.label {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+}
+
+.description {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
