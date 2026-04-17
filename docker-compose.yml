@@ -1,69 +1,30 @@
-version: '3.9'
-
-# Full-stack ShipForge — runs frontend + backend + PostgreSQL together
-# Usage: docker compose up -d
-
 services:
-  # ── PostgreSQL ──────────────────────────────────────────────────────────────
-  postgres:
-    image: postgres:16-alpine
-    container_name: shipforge_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-shipforge}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shipforge_dev_password}
-      POSTGRES_DB: ${POSTGRES_DB:-shipforge}
+  frontend:
+    image: garvg4278/shipforge-frontend:latest
     ports:
-      - '5432:5432'
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  backend:
+    image: garvg4278/shipforge-backend:latest
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://shipforge:shipforge_dev@db:5432/shipforge
+      JWT_SECRET: supersecretkey   # ✅ REQUIRED FIX
+      NODE_ENV: production
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: shipforge
+      POSTGRES_PASSWORD: shipforge_dev
+      POSTGRES_DB: shipforge
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-shipforge}']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ── Backend API ─────────────────────────────────────────────────────────────
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: shipforge_api
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      PORT: 5000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-shipforge}:${POSTGRES_PASSWORD:-shipforge_dev_password}@postgres:5432/${POSTGRES_DB:-shipforge}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      CORS_ORIGIN: http://localhost:3000
-      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
-    ports:
-      - '5000:5000'
-    healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:5000/api/health']
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
-  # ── Frontend (Next.js) ──────────────────────────────────────────────────────
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: shipforge_frontend
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_healthy
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:5000/api
-    ports:
-      - '3000:3000'
 
 volumes:
   postgres_data:
