@@ -25,6 +25,18 @@ docker compose up
 
 ---
 
+## ⚠️ First-Time Setup (Required Once)
+
+Before running the app on a new machine:
+
+```bash
+cp .env.example .env
+```
+
+👉 This creates required environment variables.
+
+---
+
 ## 🌐 Access the Application
 
 | Service  | URL                              |
@@ -61,7 +73,7 @@ The system will:
 * ✅ Start backend server
 * ✅ Start frontend
 
-👉 No manual setup required.
+👉 No manual setup required after `.env` creation.
 
 ---
 
@@ -175,16 +187,17 @@ This project is fully containerized and available via Docker Hub:
 * 👤 Role-based Access (Admin/User)
 * 🐳 Fully Dockerized
 * ⚡ One-command startup
-* 🧱 Clean architecture (Frontend + Backend separation)
+* 🧱 Clean architecture
 
 ---
 
-## 🚀 Future Improvements
+## 🚀 Deployment (Coming Next)
 
-* CI/CD with GitHub Actions
-* Deployment (AWS / Render)
-* Monitoring & logging (Prometheus, Grafana)
-* Email notifications
+This project is ready for:
+
+* 🌍 Cloud deployment (AWS / Render)
+* 🔐 HTTPS setup
+* ⚙️ CI/CD pipelines
 
 ---
 
