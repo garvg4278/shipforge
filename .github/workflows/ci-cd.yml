@@ -75,6 +75,8 @@ jobs:
             # Validate Prisma schema is parseable
             - name: Validate Prisma schema
               run: npx prisma validate
+              env:
+                DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
 
     # ═══════════════════════════════════════════════════════════════════════════════
     # JOB 2 — Type-check the frontend
@@ -106,7 +108,7 @@ jobs:
               run: npx tsc --noEmit
 
             - name: Next.js lint
-              run: npm run lint --if-present
+              run: npm npx next lint
 
     # ═══════════════════════════════════════════════════════════════════════════════
     # JOB 3 — Build Docker images
