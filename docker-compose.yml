@@ -1,37 +1,134 @@
-services:
-  frontend:
-    image: garvg4278/shipforge-frontend:latest
-    ports:
-      - "3000:3000"
-    depends_on:
-      backend:
-        condition: service_started
+# docker-compose.yml
+#
+# ShipForge — Full-Stack Logistics Platform
+# ──────────────────────────────────────────
+# Usage:
+#   docker compose up -d          # start in background
+#   docker compose logs -f        # follow all logs
+#   docker compose down           # stop (keep DB volume)
+#   docker compose down -v        # stop and wipe DB volume
+#
+# Required: create a .env file at the project root before first run.
+#   cp .env.example .env
+#   # then edit .env and set a strong JWT_SECRET
 
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:15.7-alpine
+    container_name: shipforge_db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-shipforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shipforge_dev}
+      POSTGRES_DB:       ${POSTGRES_DB:-shipforge}
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - shipforge_net
+
+    healthcheck:
+      test:     ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shipforge} -d ${POSTGRES_DB:-shipforge}"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+      start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Backend API ──────────────────────────────────────────────────────────────
   backend:
     image: garvg4278/shipforge-backend:latest
-    ports:
-      - "5000:5000"
+    container_name: shipforge_backend
+    restart: unless-stopped
+
+    # Only start after the DB passes its healthcheck
     depends_on:
       db:
         condition: service_healthy
+
     env_file:
       - .env
+
     environment:
       NODE_ENV: production
+      PORT:     5000
+      # Override DATABASE_URL to use the compose service name as hostname
+      DATABASE_URL: postgresql://${POSTGRES_USER:-shipforge}:${POSTGRES_PASSWORD:-shipforge_dev}@db:5432/${POSTGRES_DB:-shipforge}
 
-  db:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: shipforge
-      POSTGRES_PASSWORD: shipforge_dev
-      POSTGRES_DB: shipforge
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+
+    networks:
+      - shipforge_net
+
+    # The HEALTHCHECK in the Dockerfile tells Docker when the backend is ready.
+    # The frontend waits on this via service_healthy below.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U shipforge"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      test:         ["CMD", "curl", "-sf", "http://localhost:5000/api/health"]
+      interval:     15s
+      timeout:      5s
+      retries:      5
+      start_period: 60s
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+  frontend:
+    image: garvg4278/shipforge-frontend:latest
+    container_name: shipforge_frontend
+    restart: unless-stopped
+
+    # Only start after the backend API is healthy (not just started)
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    environment:
+      # This is the URL the browser uses to reach the API.
+      # In production behind a reverse proxy, set this to your public API domain.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5000/api}
+
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+    networks:
+      - shipforge_net
+
+    healthcheck:
+      test:         ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval:     20s
+      timeout:      5s
+      retries:      3
+      start_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ── Named volumes ────────────────────────────────────────────────────────────
 volumes:
   postgres_data:
+    name: shipforge_postgres_data
+
+# ── Network ──────────────────────────────────────────────────────────────────
+# Explicit bridge network so service names resolve as hostnames,
+# and the network is isolated from other Docker projects on the same host.
+networks:
+  shipforge_net:
+    name: shipforge_network
+    driver: bridge

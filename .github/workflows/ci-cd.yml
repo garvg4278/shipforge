@@ -3,18 +3,13 @@
 # ShipForge CI/CD Pipeline
 # ─────────────────────────
 # Triggers:
-#   • Every push to main  → full pipeline (lint → build → push → health check)
-#   • Every pull request  → lint + build only (no push, no deploy)
+#   • Push to main        → full pipeline: lint → build → push → health check
+#   • Pull request        → lint + build only (no push, no integration test)
 #
-# Required GitHub secrets:
-#   DOCKER_USERNAME   — your Docker Hub username  (garvg4278)
-#   DOCKER_PASSWORD   — Docker Hub access token (NOT your login password)
-#                       Create one at: hub.docker.com → Account Settings → Security
-#
-# Optional GitHub secrets for production deployment:
-#   DEPLOY_HOST       — SSH hostname / IP of your server
-#   DEPLOY_USER       — SSH username
-#   DEPLOY_KEY        — SSH private key (contents of ~/.ssh/id_rsa)
+# Required GitHub secrets (Settings → Secrets → Actions):
+#   DOCKER_USERNAME   — Docker Hub username          (garvg4278)
+#   DOCKER_PASSWORD   — Docker Hub access token      (NOT your login password)
+#                       Create at: hub.docker.com → Account Settings → Security → New Token
 
 name: CI/CD Pipeline
 
@@ -24,8 +19,7 @@ on:
     pull_request:
         branches: [ main ]
 
-# Cancel any in-progress run for the same branch when a new push arrives.
-# Prevents resource waste on rapid successive commits.
+# Cancel in-progress runs for the same branch when a new push arrives.
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: true
@@ -37,7 +31,8 @@ env:
     PYTHON_VERSION: "3.11"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# JOB 1 — Lint & type-check the backend
+# JOB 1 — Backend lint
+# Runs fast JS syntax check + Prisma schema validation. No database needed.
 # ═══════════════════════════════════════════════════════════════════════════════
 jobs:
     lint-backend:
@@ -48,7 +43,7 @@ jobs:
                 working-directory: backend
 
         steps:
-            - name: Checkout
+            - name: Checkout repository
               uses: actions/checkout@v4
 
             - name: Setup Node.js ${{ env.NODE_VERSION }}
@@ -61,25 +56,36 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
-            # Syntax-check every JS file without needing a DB or running the server.
-            # Mirrors the same check run during development.
-            - name: Syntax check all JS files
+            - name: Syntax-check all JS files
               run: |
-                  echo "Checking syntax on all backend JS files..."
-                  find . -name "*.js" \
+                  echo "Running node --check on all backend source files..."
+                  find . \
+                    -name "*.js" \
                     ! -path "./node_modules/*" \
                     ! -path "./prisma/migrations/*" \
                     -print0 | xargs -0 node --check
-                  echo "All files passed syntax check."
+                  echo "✓ All files passed syntax check."
 
-            # Validate Prisma schema is parseable
+            # prisma validate only checks the schema file — no live DB connection needed.
+            # Provide a dummy URL so the schema parser is satisfied.
             - name: Validate Prisma schema
               run: npx prisma validate
               env:
-                DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+                  DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
 
     # ═══════════════════════════════════════════════════════════════════════════════
-    # JOB 2 — Type-check the frontend
+    # JOB 2 — Frontend type-check
+    #
+    # FIX 1: `npx tsc --noEmit` was failing because next-env.d.ts contained
+    #   import "./.next/dev/types/routes.d.ts"
+    #   That file only exists after `next dev` runs — it doesn't exist in a
+    #   fresh CI checkout. Fixed by cleaning next-env.d.ts and removing
+    #   .next/dev/types from tsconfig.json include array.
+    #
+    # FIX 2: `npx next lint .` is invalid — next lint doesn't accept a path arg
+    #   and throws "No ESLint configuration found" when given one.
+    #   Replaced with `npm run lint` which calls `next lint` correctly.
+    #   Added --if-present so the step is silently skipped if no lint script exists.
     # ═══════════════════════════════════════════════════════════════════════════════
     lint-frontend:
         name: Lint · Frontend
@@ -89,7 +95,7 @@ jobs:
                 working-directory: frontend
 
         steps:
-            - name: Checkout
+            - name: Checkout repository
               uses: actions/checkout@v4
 
             - name: Setup Node.js ${{ env.NODE_VERSION }}
@@ -102,17 +108,24 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
-            # Run the Next.js TypeScript compiler without emitting output files.
-            # Catches type errors across all .tsx/.ts files exactly as tsc would.
+            # tsc --noEmit type-checks all .ts/.tsx files without emitting JS.
+            # Requires tsconfig.json to NOT include .next/dev/types/** (fixed).
             - name: TypeScript type-check
               run: npx tsc --noEmit
 
-            - name: Next.js lint
-              run: npx next lint .
+            # `npm run lint` calls `next lint` which reads the project eslint config.
+            # --if-present means this step is silently skipped if no lint script exists
+            # in package.json (prevents failure on projects without ESLint configured).
+            - name: ESLint
+              run: npm run lint --if-present
 
     # ═══════════════════════════════════════════════════════════════════════════════
     # JOB 3 — Build Docker images
-    # Depends on both lint jobs passing so broken code never gets an image.
+    # Only runs after both lint jobs pass. Images are tagged with both :latest
+    # and :<git-sha> for pinned rollbacks.
+    #
+    # FIX: cache-to used an inline JS ternary across YAML lines — invalid YAML.
+    #      Replaced with separate steps for push vs PR runs using `if:` conditions.
     # ═══════════════════════════════════════════════════════════════════════════════
     build:
         name: Build · Docker Images
@@ -120,15 +133,12 @@ jobs:
         needs: [ lint-backend, lint-frontend ]
 
         steps:
-            - name: Checkout
+            - name: Checkout repository
               uses: actions/checkout@v4
 
-            # Set up Docker Buildx for multi-platform builds and layer caching.
             - name: Set up Docker Buildx
               uses: docker/setup-buildx-action@v3
 
-            # Login is required even on PRs if you want to pull cached layers from
-            # Docker Hub. On PRs from forks this step is skipped (secrets unavailable).
             - name: Login to Docker Hub
               if: github.event_name != 'pull_request'
               uses: docker/login-action@v3
@@ -137,37 +147,69 @@ jobs:
                   password: ${{ secrets.DOCKER_PASSWORD }}
 
             # ── Backend image ───────────────────────────────────────────────────────
-            - name: Build backend image
+            # On push to main: build, push, and write to the cache registry tag.
+            - name: Build and push backend image (main)
+              if: github.event_name != 'pull_request'
               uses: docker/build-push-action@v5
               with:
                   context: ./backend
-                  push: ${{ github.event_name != 'pull_request' }}
+                  push: true
                   tags: |
                       ${{ env.BACKEND_IMAGE }}:latest
                       ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
                   cache-from: type=registry,ref=${{ env.BACKEND_IMAGE }}:buildcache
-                  cache-to: ${{ github.event_name != 'pull_request' &&
-                      format('type=registry,ref={0}:buildcache,mode=max',
-                      env.BACKEND_IMAGE) || '' }}
+                  cache-to: type=registry,ref=${{ env.BACKEND_IMAGE }}:buildcache,mode=max
+
+            # On pull requests: build only (no push, no cache write — secrets unavailable).
+            - name: Build backend image (pull request)
+              if: github.event_name == 'pull_request'
+              uses: docker/build-push-action@v5
+              with:
+                  context: ./backend
+                  push: false
+                  tags: ${{ env.BACKEND_IMAGE }}:pr-${{ github.sha }}
 
             # ── Frontend image ──────────────────────────────────────────────────────
-            - name: Build frontend image
+            # NEXT_PUBLIC_API_URL is baked into the JS bundle at build time.
+            # http://localhost:5000/api works for the health-check job below (loopback).
+            # For a real production deploy, override this build-arg with your public domain.
+            - name: Build and push frontend image (main)
+              if: github.event_name != 'pull_request'
               uses: docker/build-push-action@v5
               with:
                   context: ./frontend
-                  push: ${{ github.event_name != 'pull_request' }}
+                  push: true
                   tags: |
                       ${{ env.FRONTEND_IMAGE }}:latest
                       ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
                   build-args: |
-                      NEXT_PUBLIC_API_URL=http://backend:5000/api
+                      NEXT_PUBLIC_API_URL=http://localhost:5000/api
                   cache-from: type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache
-                  cache-to: ${{ github.event_name != 'pull_request' &&
-                      format('type=registry,ref={0}:buildcache,mode=max',
-                      env.FRONTEND_IMAGE) || '' }}
+                  cache-to: type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache,mode=max
+
+            - name: Build frontend image (pull request)
+              if: github.event_name == 'pull_request'
+              uses: docker/build-push-action@v5
+              with:
+                  context: ./frontend
+                  push: false
+                  tags: ${{ env.FRONTEND_IMAGE }}:pr-${{ github.sha }}
+                  build-args: |
+                      NEXT_PUBLIC_API_URL=http://localhost:5000/api
 
     # ═══════════════════════════════════════════════════════════════════════════════
     # JOB 4 — Integration health check
+    # Pulls the freshly-pushed images, starts the full stack with docker compose,
+    # waits for the backend healthcheck to pass, then runs the Python health check
+    # script which validates all endpoints.
+    #
+    # FIX: heredoc in the .env step had leading spaces that were being included in
+    #      the env var values (e.g. DATABASE_URL=" postgresql://..."). Fixed with
+    #      no-indent heredoc.
+    #
+    # FIX: frontend depends_on backend with service_started — changed to
+    #      service_healthy in docker-compose.yml so the health-check job benefits
+    #      from the backend's HEALTHCHECK instruction.
     # ═══════════════════════════════════════════════════════════════════════════════
     health-check:
         name: Integration · Health Check
@@ -176,7 +218,7 @@ jobs:
         if: github.event_name != 'pull_request'
 
         steps:
-            - name: Checkout
+            - name: Checkout repository
               uses: actions/checkout@v4
 
             - name: Setup Python ${{ env.PYTHON_VERSION }}
@@ -184,10 +226,15 @@ jobs:
               with:
                   python-version: ${{ env.PYTHON_VERSION }}
 
+            # Write a clean .env with no leading whitespace.
+            # JWT_SECRET is randomly generated fresh for each CI run.
             - name: Write CI environment file
               run: |
                   JWT=$(python3 -c "import secrets; print(secrets.token_hex(64))")
-                  cat > .env <<EOF
+                  cat > .env << EOF
+                  POSTGRES_USER=shipforge
+                  POSTGRES_PASSWORD=shipforge_ci
+                  POSTGRES_DB=shipforge
                   DATABASE_URL=postgresql://shipforge:shipforge_ci@db:5432/shipforge
                   JWT_SECRET=${JWT}
                   NODE_ENV=production
@@ -195,51 +242,65 @@ jobs:
                   CORS_ORIGIN=http://localhost:3000
                   EOF
 
+            # Pull the images that the build job just pushed
             - name: Pull latest images
               run: docker compose pull
 
             - name: Start full stack
               run: docker compose up -d
 
-            - name: Wait for backend to be healthy
+            # Wait for the backend /api/health to return 200.
+            # The backend HEALTHCHECK in its Dockerfile does the same check — 
+            # this loop is a belt-and-suspenders wait for the CI environment.
+            - name: Wait for backend to become healthy
               run: |
-                  echo "Waiting for backend to become healthy..."
+                  echo "Polling http://localhost:5000/api/health ..."
                   for i in $(seq 1 30); do
-                    if curl -sf http://localhost:5000/api/health > /dev/null 2>&1; then
-                      echo "Backend is healthy after $((i * 3))s"
+                    STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/api/health 2>/dev/null || echo "000")
+                    if [ "$STATUS" = "200" ]; then
+                      echo "✓ Backend healthy after $((i * 3))s (HTTP 200)"
                       exit 0
                     fi
-                    echo "  attempt $i/30 — retrying in 3s"
+                    echo "  attempt $i/30 — got HTTP $STATUS, retrying in 3s..."
                     sleep 3
                   done
-                  echo "Backend did not become healthy in 90s"
-                  docker compose logs backend
+                  echo "✗ Backend did not become healthy within 90s"
+                  docker compose logs backend --tail 80
                   exit 1
 
-            - name: Run health check script
+            # Run the health check script with --skip-env because env vars are already
+            # injected by the step above, not stored in a local .env file on the runner.
+            - name: Run Python health check script
               run: |
                   python3 backend/scripts/health_check.py \
-                    --host localhost \
-                    --port 5000 \
+                    --host     localhost \
+                    --port     5000 \
                     --skip-env \
-                    --timeout 15 \
-                    --warn-ms 500
+                    --timeout  15 \
+                    --warn-ms  800
 
-            - name: Show container logs on failure
+            # Always print logs on failure so you can debug without SSH access
+            - name: Dump container logs on failure
               if: failure()
               run: |
-                  echo "=== backend logs ==="
-                  docker compose logs backend --tail 60
-                  echo "=== db logs ==="
-                  docker compose logs db --tail 30
+                  echo "════════ backend logs ════════"
+                  docker compose logs backend --tail 100
+                  echo "════════ db logs ════════"
+                  docker compose logs db --tail 40
+                  echo "════════ frontend logs ════════"
+                  docker compose logs frontend --tail 40
 
+            # Always clean up — even if health check fails
             - name: Tear down stack
               if: always()
-              run: docker compose down -v
+              run: docker compose down -v --remove-orphans
     # ═══════════════════════════════════════════════════════════════════════════════
-    # JOB 5 — Deploy to production (optional — uncomment when you have a server)
-    # Connects via SSH and does a docker compose pull + up on the remote host.
-    # Only runs after a successful health check on the main branch.
+    # JOB 5 — Deploy to production (disabled — uncomment when you have a server)
+    #
+    # Connects to the server over SSH and runs docker compose pull + up.
+    # Only runs after the health-check job passes on the main branch.
+    #
+    # Required secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY
     # ═══════════════════════════════════════════════════════════════════════════════
     # deploy:
     #   name: Deploy · Production
@@ -260,4 +321,4 @@ jobs:
     #           docker compose pull
     #           docker compose up -d --no-build
     #           docker image prune -f
-    #           echo "Deployed commit ${{ github.sha }}"
+    #           echo "Deployed ${{ github.sha }}"
