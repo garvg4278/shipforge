@@ -107,8 +107,9 @@ jobs:
             - name: TypeScript type-check
               run: npx tsc --noEmit
 
+            # FIXED: use npm script instead of direct npx (avoids path issues)
             - name: Next.js lint
-              run: npx next lint
+              run: npm run lint --if-present
 
     # ═══════════════════════════════════════════════════════════════════════════════
     # JOB 3 — Build Docker images
@@ -137,8 +138,6 @@ jobs:
                   password: ${{ secrets.DOCKER_PASSWORD }}
 
             # ── Backend image ───────────────────────────────────────────────────────
-            # cache-from / cache-to: reuse unchanged layers across runs.
-            # On PRs: build only (push: false). On main: build + push.
             - name: Build backend image
               uses: docker/build-push-action@v5
               with:
@@ -153,8 +152,6 @@ jobs:
                       env.BACKEND_IMAGE) || '' }}
 
             # ── Frontend image ──────────────────────────────────────────────────────
-            # NEXT_PUBLIC_API_URL is baked into the Next.js build at image creation.
-            # It points to the backend container name as used in docker-compose.yml.
             - name: Build frontend image
               uses: docker/build-push-action@v5
               with:
@@ -172,9 +169,6 @@ jobs:
 
     # ═══════════════════════════════════════════════════════════════════════════════
     # JOB 4 — Integration health check
-    # Spins up the full stack with docker compose and runs the Python health check
-    # script against it. Proves images actually boot and the API responds correctly.
-    # Only runs on pushes to main (not PRs) since it needs the freshly pushed images.
     # ═══════════════════════════════════════════════════════════════════════════════
     health-check:
         name: Integration · Health Check
@@ -191,8 +185,6 @@ jobs:
               with:
                   python-version: ${{ env.PYTHON_VERSION }}
 
-            # Write a minimal .env for the docker compose run.
-            # JWT_SECRET uses a random 64-byte hex string generated fresh each run.
             - name: Write CI environment file
               run: |
                   JWT=$(python3 -c "import secrets; print(secrets.token_hex(64))")
@@ -204,15 +196,12 @@ jobs:
                   CORS_ORIGIN=http://localhost:3000
                   EOF
 
-            # Pull the images that were just pushed in the build job
             - name: Pull latest images
               run: docker compose pull
 
             - name: Start full stack
               run: docker compose up -d
 
-            # Wait for the backend to become healthy before running checks.
-            # Polls /api/health every 3 seconds for up to 90 seconds.
             - name: Wait for backend to be healthy
               run: |
                   echo "Waiting for backend to become healthy..."
@@ -228,8 +217,6 @@ jobs:
                   docker compose logs backend
                   exit 1
 
-            # Run the Python health check script. Uses --skip-env because env vars
-            # are already injected by the CI step above, not read from a local file.
             - name: Run health check script
               run: |
                   python3 backend/scripts/health_check.py \
