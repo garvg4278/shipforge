@@ -117,7 +117,7 @@ jobs:
             # --if-present means this step is silently skipped if no lint script exists
             # in package.json (prevents failure on projects without ESLint configured).
             - name: ESLint
-              run: npx next lint --dir .
+              run: npx eslint . --ext .ts,.tsx --max-warnings 0
 
     # ═══════════════════════════════════════════════════════════════════════════════
     # JOB 3 — Build Docker images
