@@ -107,9 +107,8 @@ jobs:
             - name: TypeScript type-check
               run: npx tsc --noEmit
 
-            # FIXED: use npm script instead of direct npx (avoids path issues)
             - name: Next.js lint
-              run: npm run lint --if-present
+              run: npx eslint . --ext .js,.jsx,.ts,.tsx
 
     # ═══════════════════════════════════════════════════════════════════════════════
     # JOB 3 — Build Docker images
