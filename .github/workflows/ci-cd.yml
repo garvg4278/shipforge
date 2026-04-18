@@ -108,7 +108,7 @@ jobs:
               run: npx tsc --noEmit
 
             - name: Next.js lint
-              run: npx eslint . --ext .js,.jsx,.ts,.tsx
+              run: npx next lint .
 
     # ═══════════════════════════════════════════════════════════════════════════════
     # JOB 3 — Build Docker images
