@@ -1,230 +1,173 @@
-# CI/CD Pipeline
+# CI/CD Pipeline — Jenkins
 
-This document explains the ShipForge GitHub Actions pipeline: what each job does,
-why it's structured that way, how to configure it, and how to debug failures.
+ShipForge uses **Jenkins** running in Docker as its CI/CD server. The pipeline
+is defined in `Jenkinsfile` at the project root and uses Docker to build and
+push images to Docker Hub on every push to `main`.
 
 ---
 
-## Overview
-
-The pipeline lives at `.github/workflows/ci-cd.yml` and runs automatically:
-
-| Trigger | What runs |
-|---------|-----------|
-| Push to `main` | All 4 jobs: lint → build → push to Docker Hub → health check |
-| Pull request to `main` | Jobs 1–3 only: lint → build (no push, no health check) |
+## Pipeline Overview
 
 ```
 Push to main
 │
-├─ [1] lint-backend   ──────┐
-│   Syntax check + prisma   │
-│   validate                ├─── [3] build ──── [4] health-check
-├─ [2] lint-frontend        │     Docker        Integration
-│   tsc --noEmit + eslint  ─┘     build +        test with
-│                                  push           Python script
-│
-Pull request → jobs 1 + 2 + 3 only (no push, no health-check)
+├─ Stage 1: Checkout
+├─ Stage 2: Lint — Backend      (node --check + prisma validate)
+├─ Stage 3: Lint — Frontend     (tsc --noEmit)
+├─ Stage 4: Build — Backend     (docker build)
+├─ Stage 5: Build — Frontend    (docker build)
+├─ Stage 6: Push Images         (docker push → Docker Hub)   ← main only
+├─ Stage 7: Health Check        (docker compose up + Python script)
+└─ Post:    Cleanup             (always — tears down stack, prunes images)
 ```
 
----
-
-## Job Details
-
-### Job 1 — `lint-backend`
-
-**What it does:**
-
-1. Installs backend npm dependencies (with `npm ci` — reproducible, uses lockfile)
-2. Runs `node --check` on every `.js` file in the backend — catches syntax errors without starting the server
-3. Runs `npx prisma validate` — confirms the Prisma schema is syntactically correct and all relations are valid
-
-**Why syntax check instead of a full linter?**
-
-The project doesn't have ESLint configured on the backend. Rather than adding a linter with zero config and getting false positives, `node --check` catches the real breaking errors (syntax) that would cause the Docker build to fail at runtime. If you add ESLint later, replace this step with `npm run lint`.
-
-**Working directory:** `backend/`
+Stages 6 and 7 only run on the `main` branch. On feature branches, only
+lint and build stages run (verifies the code compiles without pushing anything).
 
 ---
 
-### Job 2 — `lint-frontend`
+## Running Jenkins
 
-**What it does:**
+Jenkins runs as a Docker container defined in `jenkins/docker-compose.yml`.
+It is **completely separate** from the application's `docker-compose.yml`.
 
-1. Installs frontend npm dependencies
-2. Runs `npx tsc --noEmit` — runs the TypeScript compiler across all `.tsx`/`.ts` files without emitting JavaScript output, catching type errors the same way `npm run build` would
-3. Runs `npm run lint --if-present` — runs ESLint if it's configured (the `--if-present` flag makes this optional so the job doesn't fail if no lint script exists)
-
-**Working directory:** `frontend/`
-
----
-
-### Job 3 — `build`
-
-**Runs after:** both lint jobs pass
-
-**What it does:**
-
-1. Sets up Docker Buildx — enables layer caching, multi-platform support
-2. Logs into Docker Hub (skipped on pull requests from forks where secrets are unavailable)
-3. Builds the backend Docker image from `backend/Dockerfile`
-4. Builds the frontend Docker image from `frontend/Dockerfile` with `NEXT_PUBLIC_API_URL` baked in
-
-**Image tags pushed:**
-
-| Tag | When | Usage |
-|-----|------|-------|
-| `garvg4278/shipforge-backend:latest` | Every push to `main` | `docker compose pull` always gets newest |
-| `garvg4278/shipforge-backend:<sha>` | Every push to `main` | Pinpoint rollback to any specific commit |
-| `garvg4278/shipforge-frontend:latest` | Every push to `main` | Same |
-| `garvg4278/shipforge-frontend:<sha>` | Every push to `main` | Same |
-
-**On pull requests:** images are built but **not pushed**. This proves the Dockerfile works without wasting Docker Hub push quota or contaminating `latest` with unmerged code.
-
-**Layer caching:**
-
-```yaml
-cache-from: type=registry,ref=garvg4278/shipforge-backend:buildcache
-cache-to:   type=registry,ref=garvg4278/shipforge-backend:buildcache,mode=max
-```
-
-On a cold build (no cache), the backend takes ~90s. With cache, unchanged layers (OS, npm install) are reused — typical rebuild time after a code change drops to ~15s.
-
----
-
-### Job 4 — `health-check`
-
-**Runs after:** build job pushes images
-**Skipped on:** pull requests
-
-**What it does:**
-
-1. Writes a fresh `.env` file with a randomly generated `JWT_SECRET` for this run
-2. Pulls the images that were just pushed in Job 3
-3. Runs `docker compose up -d` — spins up the full stack: PostgreSQL + backend + frontend
-4. Polls `/api/health` every 3 seconds for up to 90 seconds until the backend is healthy
-5. Runs `backend/scripts/health_check.py` — checks 5 things (see [health check](#health-check-script))
-6. Dumps container logs on failure so you can debug without SSHing into the runner
-7. Tears down the stack with `docker compose down -v` (cleanup even if step 5 fails)
-
-**Why run this in CI?**
-
-Building a Docker image passing lint doesn't mean the application actually boots correctly. This job proves:
-- The backend can connect to PostgreSQL
-- Prisma migrations run cleanly
-- The API accepts and rejects requests correctly
-- The health endpoint shape matches what the Docker healthcheck expects
-
----
-
-## Health Check Script
-
-`backend/scripts/health_check.py` — a zero-dependency Python script.
-
-**Checks performed:**
-
-| Check | What it validates |
-|-------|------------------|
-| Environment Variables | `DATABASE_URL` and `JWT_SECRET` are set; JWT is ≥32 chars; DB URL looks like PostgreSQL |
-| API Health Endpoint | `GET /api/health` returns `200` with `success:true` and an `uptime` field |
-| Auth System | `POST /api/auth/login` with bad creds returns `401` (proves DB is connected and auth middleware is active) |
-| 404 Handler | A nonexistent route returns `404` with `{success: false, message: ...}` (confirms app.js catch-all is active) |
-| Response Latency | Average of 3 pings to `/api/health` is under 300ms |
-
-**Run it manually:**
+### Start Jenkins
 
 ```bash
-# While Docker stack is running
-python3 backend/scripts/health_check.py
-
-# Against a remote host
-python3 backend/scripts/health_check.py --host api.yourdomain.com --port 5000 --skip-env
-
-# Machine-readable output (for monitoring tools)
-python3 backend/scripts/health_check.py --json
-
-# Strict latency threshold (e.g. 100ms)
-python3 backend/scripts/health_check.py --warn-ms 100
+cd jenkins
+docker compose up -d
 ```
 
-**Exit codes:** `0` = all passed · `1` = one or more failed
-
----
-
-## Required GitHub Secrets
-
-Go to your repository → **Settings → Secrets and variables → Actions → New repository secret**:
-
-| Secret | Value | How to get it |
-|--------|-------|---------------|
-| `DOCKER_USERNAME` | `garvg4278` | Your Docker Hub username |
-| `DOCKER_PASSWORD` | Your access token | Docker Hub → Account Settings → Security → New Access Token (use Read/Write scope) |
-
-> Use an **access token**, not your Docker Hub password. Tokens can be revoked without changing your password.
-
----
-
-## Concurrency Control
-
-```yaml
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-```
-
-If you push two commits in quick succession, the pipeline for the first commit is automatically cancelled when the second starts. This prevents 10-minute old deploys from overwriting a newer one.
-
----
-
-## Migrating from the Old Workflow
-
-The previous `docker.yml` had one job that did everything in sequence. The new `ci-cd.yml` replaces it. To switch:
+First startup takes 2–3 minutes while plugins install. Watch progress:
 
 ```bash
-# Delete the old workflow
-rm .github/workflows/docker.yml
-
-# The new file is already at .github/workflows/ci-cd.yml
-# Add it, commit, and push:
-git add .github/workflows/ci-cd.yml
-git rm .github/workflows/docker.yml
-git commit -m "ci: replace single-job workflow with multi-stage pipeline"
-git push
+docker compose logs -f
+# Wait for: "Jenkins is fully up and running"
 ```
 
-The old workflow will stop triggering once it's deleted from the repository.
+Open **http://localhost:8080**
+
+Default login: `admin` / `admin123`
+**Change this password immediately** after first login.
+
+### Stop Jenkins
+
+```bash
+cd jenkins
+docker compose down        # keeps build history (jenkins_data volume)
+docker compose down -v     # deletes all data including job history
+```
 
 ---
 
-## Debugging a Failed Run
+## First-Time Setup After Starting Jenkins
 
-1. **Click the failed job** in the GitHub Actions tab to see step-level output
-2. **Lint failure** — look at the `node --check` or `tsc --noEmit` output; it prints the exact file and line number
-3. **Build failure** — look at the Docker build step; usually a missing file, bad Dockerfile syntax, or `npm ci` failure
-4. **Health check failure** — the "Show container logs on failure" step automatically dumps `docker compose logs backend` and `docker compose logs db` — look for Prisma migration errors or connection refused messages
+### Step 1 — Add Docker Hub credentials
 
-### Common issues
+1. Go to **Manage Jenkins → Credentials → System → Global credentials → Add Credentials**
+2. Fill in:
+   - **Kind:** Username with password
+   - **Username:** `garvg4278`
+   - **Password:** your Docker Hub access token *(not your login password —
+     create one at hub.docker.com → Account Settings → Security → New Token)*
+   - **ID:** `dockerhub-credentials` ← must match this exactly
+   - **Description:** Docker Hub — garvg4278
+3. Click **Create**
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `DOCKER_USERNAME` not found | Secret not configured | Add it in Settings → Secrets |
-| `npm ci` fails | `package-lock.json` out of sync | Run `npm install` locally and commit the updated lockfile |
-| Health check: connection refused | Backend didn't start in 90s | Check backend logs; likely a migration error or wrong `DATABASE_URL` |
-| `prisma validate` fails | Schema has a broken relation | Fix `prisma/schema.prisma` and run `npx prisma validate` locally first |
-| TypeScript errors in CI but not locally | Different `tsconfig.json` or `strict` mode | Run `npx tsc --noEmit` locally to reproduce |
+### Step 2 — Create the pipeline job
+
+1. Click **New Item**
+2. Enter name: `shipforge`
+3. Select **Pipeline** → click OK
+4. Under **Build Triggers**, tick **Poll SCM** and enter `H/5 * * * *`
+   *(or configure a GitHub webhook — see Webhooks section below)*
+5. Under **Pipeline**, select **Pipeline script from SCM**
+6. **SCM:** Git
+7. **Repository URL:** `https://github.com/garvg4278/shipforge-fullstack.git`
+8. **Branch:** `*/main`
+9. **Script Path:** `Jenkinsfile`
+10. Click **Save**
+
+### Step 3 — Run the pipeline
+
+Click **Build Now** to trigger the first run manually.
+The pipeline will run through all stages and show results in Blue Ocean.
 
 ---
 
-## Adding a New Check to the Pipeline
+## Pipeline Files
 
-To add a step (e.g. run tests once you write them):
+| File | Purpose |
+|------|---------|
+| `Jenkinsfile` | Pipeline definition (stages, steps, post actions) |
+| `jenkins/docker-compose.yml` | Runs the Jenkins server container |
+| `jenkins/plugins.txt` | Plugins installed on first Jenkins startup |
+| `jenkins/casc.yml` | Jenkins config as code (admin user, tools, security) |
 
-```yaml
-# In the lint-backend job, add after the Prisma validate step:
-- name: Run backend tests
-  run: npm test
-  env:
-    DATABASE_URL: postgresql://test:test@localhost:5432/test_db
-```
+---
 
-Keep lint jobs fast (< 60s) and save slower things (integration tests, load tests) for separate jobs that run in parallel.
+## Jenkinsfile Stage Details
+
+### Stage 2 — Lint: Backend
+Runs `node --check` on every `.js` file (excludes `node_modules` and Prisma
+migrations). Also runs `npx prisma validate` with a dummy `DATABASE_URL` —
+this only reads the schema file, no live database needed.
+
+### Stage 3 — Lint: Frontend
+Runs `npx tsc --noEmit` — TypeScript compiler in check-only mode. This catches
+all type errors across every `.tsx` and `.ts` file without emitting JS output.
+
+**Note:** `next lint` (ESLint) is intentionally skipped. Next.js 16 has a
+confirmed bug where it reads the `npm_lifecycle_event` environment variable as
+a directory path, causing `Invalid project directory` errors regardless of how
+the command is invoked. TypeScript type-checking enforces code correctness.
+
+### Stage 6 — Push Images
+Only runs on the `main` branch. Uses the `dockerhub-credentials` stored in
+Jenkins to authenticate with Docker Hub. Pushes two tags per image:
+- `:latest` — always the newest build
+- `:<git-sha>` — pinned to exact commit for rollbacks
+
+### Stage 7 — Health Check
+Writes a fresh `.env` with a randomly generated `JWT_SECRET`, starts the full
+application stack with `docker compose up -d`, waits for `GET /api/health` to
+return HTTP 200, then runs `backend/scripts/health_check.py` which validates
+5 endpoints. Tears down the stack in the `post { always }` block.
+
+---
+
+## GitHub Webhook (optional — faster than polling)
+
+Instead of polling every 5 minutes, configure a webhook so GitHub notifies
+Jenkins instantly on every push:
+
+1. Your Jenkins must be publicly accessible (or use ngrok for local dev)
+2. GitHub repo → **Settings → Webhooks → Add webhook**
+3. **Payload URL:** `http://YOUR_JENKINS_IP:8080/github-webhook/`
+4. **Content type:** `application/json`
+5. **Events:** Just the push event
+6. In Jenkins job → **Build Triggers** → tick **GitHub hook trigger for GITScm polling**
+
+---
+
+## Debugging a Failed Build
+
+1. Click the failed build number in Jenkins
+2. Click **Console Output** to see the full log
+3. The `post { failure }` block automatically dumps `docker compose logs` for
+   backend, db, and frontend — look for these in the console output
+4. Common failure causes:
+   - Docker Hub push fails → check `dockerhub-credentials` are correct
+   - Health check timeout → check `docker compose logs backend` output in the log
+   - TypeScript errors → look at the `Lint: Frontend` stage output
+
+---
+
+## Docker Images
+
+Built and pushed by the pipeline on every successful `main` branch build:
+
+| Image | Tag |
+|-------|-----|
+| `garvg4278/shipforge-backend` | `:latest` and `:<git-sha>` |
+| `garvg4278/shipforge-frontend` | `:latest` and `:<git-sha>` |

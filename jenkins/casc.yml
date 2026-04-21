@@ -1,0 +1,74 @@
+# jenkins/casc.yml
+# Jenkins Configuration as Code (JCasC)
+# Automatically configures Jenkins on first startup.
+# Edit this file instead of clicking through the Jenkins UI.
+#
+# After changing this file, restart the Jenkins container:
+#   cd jenkins && docker compose restart jenkins
+
+jenkins:
+  systemMessage: "ShipForge CI/CD — Jenkins Pipeline Server"
+
+  # ── Security: local user database ──────────────────────────────────────────
+  # Admin user created automatically. CHANGE THE PASSWORD after first login.
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          name: "ShipForge Admin"
+          password: "admin123"      # ← CHANGE THIS after first login
+
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+  # ── Global settings ─────────────────────────────────────────────────────────
+  numExecutors: 2
+
+  # ── Node / label settings ───────────────────────────────────────────────────
+  nodes:
+    - permanent:
+        name: "built-in"
+        numExecutors: 2
+
+# ── Tools: Node.js ──────────────────────────────────────────────────────────
+# Jenkins will auto-install Node.js 20 for pipeline steps that need it.
+tool:
+  nodejs:
+    installations:
+      - name: "NodeJS-20"
+        properties:
+          - installSource:
+              installers:
+                - nodeJSInstaller:
+                    id: "20.19.0"
+                    npmPackagesRefreshHours: 72
+
+# ── Credentials placeholder ─────────────────────────────────────────────────
+# Docker Hub credentials are added through the Jenkins UI after first startup:
+#   Jenkins → Manage Jenkins → Credentials → Global → Add Credentials
+#   Kind: Username with password
+#   Username: garvg4278
+#   Password: <your Docker Hub access token>
+#   ID: dockerhub-credentials        ← must match Jenkinsfile exactly
+#   Description: Docker Hub — garvg4278
+#
+# To add via JCasC (optional — requires base64 encoded password):
+# credentials:
+#   system:
+#     domainCredentials:
+#       - credentials:
+#           - usernamePassword:
+#               id: "dockerhub-credentials"
+#               username: "garvg4278"
+#               password: "<your-token>"
+#               description: "Docker Hub access token"
+
+# ── Unclassified settings ────────────────────────────────────────────────────
+unclassified:
+  location:
+    url: "http://localhost:8080/"
+    adminAddress: "admin@shipforge.com"
+  globalLibraries:
+    libraries: []

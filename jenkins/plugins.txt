@@ -1,0 +1,39 @@
+# jenkins/plugins.txt
+# Jenkins plugin list — installed automatically on first startup.
+# Format: plugin-id:version  OR  plugin-id:latest
+#
+# To update: change version numbers and restart Jenkins container.
+
+# ── Core pipeline plugins ─────────────────────────────────────────────────────
+workflow-aggregator:latest
+pipeline-stage-view:latest
+pipeline-graph-analysis:latest
+blueocean:latest
+
+# ── Source control ────────────────────────────────────────────────────────────
+git:latest
+github:latest
+github-branch-source:latest
+
+# ── Docker integration ────────────────────────────────────────────────────────
+docker-workflow:latest
+docker-commons:latest
+docker-plugin:latest
+
+# ── Credentials ───────────────────────────────────────────────────────────────
+credentials:latest
+credentials-binding:latest
+plain-credentials:latest
+
+# ── Build tools & environment ─────────────────────────────────────────────────
+nodejs:latest
+ansicolor:latest
+timestamper:latest
+ws-cleanup:latest
+
+# ── Configuration as Code ─────────────────────────────────────────────────────
+configuration-as-code:latest
+
+# ── UI improvements ───────────────────────────────────────────────────────────
+locale:latest
+matrix-auth:latest

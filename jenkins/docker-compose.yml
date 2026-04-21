@@ -1,0 +1,60 @@
+# jenkins/docker-compose.yml
+#
+# Runs Jenkins as a Docker container on your machine.
+# This is completely separate from the application's docker-compose.yml.
+#
+# Usage:
+#   cd jenkins
+#   docker compose up -d
+#   docker compose logs -f        # watch startup logs
+#
+# First run takes 2-3 minutes while Jenkins downloads plugins.
+# Open http://localhost:8080 when logs show "Jenkins is fully up and running"
+
+services:
+
+  jenkins:
+    image: jenkins/jenkins:lts-jdk17
+    container_name: shipforge_jenkins
+    restart: unless-stopped
+    privileged: true
+    user: root
+
+    ports:
+      - "8080:8080"     # Jenkins web UI
+      - "50000:50000"   # Jenkins agent port (needed for distributed builds)
+
+    environment:
+      # Skip the initial setup wizard — plugins.txt handles plugin installation
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+      # Point Jenkins to the casc config file
+      CASC_JENKINS_CONFIG: /var/jenkins_home/casc.yml
+
+    volumes:
+      # Persist Jenkins data (jobs, credentials, build history) across restarts
+      - jenkins_data:/var/jenkins_home
+      # Mount the Docker socket so Jenkins can run docker commands
+      # This lets Jenkins build and push Docker images from inside the container
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount docker binary so Jenkins container can use the host's docker CLI
+      - /usr/bin/docker:/usr/bin/docker
+      # Mount our plugins list and casc config into the container
+      - ./plugins.txt:/usr/share/jenkins/ref/plugins.txt
+      - ./casc.yml:/var/jenkins_home/casc.yml
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  jenkins_data:
+    name: shipforge_jenkins_data

@@ -4,7 +4,7 @@
 node_modules/
 **/node_modules/
 
-# Env files (VERY IMPORTANT)
+# Env files
 .env
 .env.*
 **/.env
@@ -31,3 +31,10 @@ coverage/
 
 # Prisma (optional local db)
 backend/prisma/dev.db
+
+# Jenkins — ignore the jenkins_data volume and workspace files
+jenkins/jenkins_data/
+jenkins/.env
+
+# Docker
+*.tar
